@@ -20,16 +20,20 @@ elif [[ "$1" == "--client" ]]; then
 
 elif [[ "$1" == "--dump" ]]; then
   [ -z "$2" ] && echo "docker run aptible/mongodb --dump mongodb://... > dump.mongo" && exit
+  # If the file /dump-output exists, write output there. Otherwise, use stdout.
+  [ -e /dump-output ] && exec 3>/dump-output || exec 3>&1
   # https://jira.mongodb.org/browse/SERVER-7860
   # Can't dump the whole database to stdout in a straightforward way. Instead,
   # dump to a directory and then tar the directory and print the tar to stdout.
   parse_url "$2"
   dump_command="mongodump --host="$host" --port="${port:-27017}" --username="$user" --password="$password" --db="$database" --out=/tmp/"$dump_directory""
-  $dump_command > /dev/null && tar cf - -C /tmp/ "$dump_directory"
+  $dump_command > /dev/null && tar cf - -C /tmp/ "$dump_directory" >&3
 
 elif [[ "$1" == "--restore" ]]; then
   [ -z "$2" ] && echo "docker run -i aptible/mongodb --restore mongodb://... < dump.mongo" && exit
-  tar xf - -C /tmp/
+  # If the file /restore-input exists, read input there. Otherwise, use stdin.
+  [ -e /restore-input ] && exec 3</restore-input || exec 3<&0
+  tar xf - -C /tmp/ <&3
   parse_url "$2"
   mongorestore --host="$host" --port="${port:-27017}" --username="$user" --password="$password" --db="$database" /tmp/"$dump_directory"/"$database"
 
